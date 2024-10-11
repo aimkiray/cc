@@ -132,19 +132,19 @@ class MainWindow:
         frame3 = ttk.Frame(self.root)
         frame3.grid(row=4, column=0, sticky='ew', padx=padx, pady=pady)
 
-        # Set the weight of the first column to a large number
-        frame3.columnconfigure(0, weight=1)
+        # Set the weight of the second column to a large number
+        frame3.columnconfigure(1, weight=1)
 
-        link = ttk.Label(frame3, text="v0.1.0", cursor="hand2")
+        link = ttk.Label(frame3, text="v0.1.0", cursor="hand2", foreground='blue')
         link.grid(row=0, column=0, padx=padx, sticky='ew')
         link.bind("<Button-1>", self.open_link)
 
         save_button = ttk.Button(frame3, text="立即备份", command=self.start_save)
-        save_button.grid(row=0, column=1, padx=padx)
+        save_button.grid(row=0, column=2, padx=padx)
         minimize_button = ttk.Button(frame3, text="最小化", command=self.hide_window)
-        minimize_button.grid(row=0, column=2, padx=padx)
+        minimize_button.grid(row=0, column=3, padx=padx)
         exit_button = ttk.Button(frame3, text="退出", command=self.exit_button_clicked)
-        exit_button.grid(row=0, column=3, padx=padx)
+        exit_button.grid(row=0, column=4, padx=padx)
 
         # Frame 5: Blank
         frame5 = ttk.Frame(self.root)
@@ -204,7 +204,7 @@ class MainWindow:
         ps_version, active_doc = get_ps_info()
         if self.ps_version_label.winfo_exists() and self.active_doc_label.winfo_exists():
             self.ps_version_label.config(text=f"PS Version: {ps_version}")
-            self.active_doc_label.config(text=f"Active PSD: {active_doc}")
+            self.active_doc_label.config(text=f"Active Doc: {active_doc}")
 
     def update_ps_info_periodically(self):
         self.update_ps_info()  # 更新 Photoshop 信息
@@ -236,7 +236,7 @@ class MainWindow:
             self.config_manager.set_folder_path(folder_selected)
 
     def open_link(self, event):
-        webbrowser.open_new(r"https://github.com/aimkiray/psb")
+        webbrowser.open_new(r"https://github.com/aimkiray/cc")
 
     def start_save(self, silent=False):
         if self.auto_save_thread and self.auto_save_thread.is_alive():
