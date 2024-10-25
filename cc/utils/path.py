@@ -10,4 +10,6 @@ def resource_path(relative_path):
         # 正常执行时的路径
         base_path = os.path.abspath(".")
 
+    relative_path = os.path.normpath(relative_path)
+
     return os.path.join(base_path, relative_path)

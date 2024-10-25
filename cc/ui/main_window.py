@@ -1,9 +1,15 @@
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
 import os
+import sys
 import threading
 import logging
 import webbrowser
+import ctypes
+import pywinstyles
+
+import tkinter as tk
+from tkinter import filedialog, messagebox
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
 
 from ..utils.cleanup import clean_old_backups
 from ..utils.path import resource_path
@@ -12,9 +18,19 @@ from .tray_icon import start_tray_icon
 from ..config import ConfigManager
 
 class MainWindow:
-    def __init__(self, root, scale):
-        self.root = root
-        self.scale = scale
+    def __init__(self):
+        # fix dpi
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+        # 获取屏幕的缩放比例
+        self.scale = ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100.0
+
+        self.root = tk.Tk()
+        # tksvg.load(self.root)
+        # Import the tcl file
+        # self.root.tk.call('source', resource_path('cc/ui/sun-valley.tcl'))
+        # self.root.tk.call("set_theme", "dark")
+        self.apply_theme_to_titlebar()
+
         self.tray = start_tray_icon(resource_path("icon.ico"), "CreativeCache", self.show_window, self.hide_window, self.exit_app)
         self.cleanup_thread = None
         self.auto_save_job = None
@@ -31,21 +47,15 @@ class MainWindow:
         self.update_ps_info_periodically()
         self.handle_auto_save()
 
+        self.root.mainloop()
+
     def setup_ui(self):
         self.root.title("CreativeCache")
         self.root.iconbitmap(resource_path("icon.ico"))
-        self.root.configure(background="#bbded6")
         
         self.root.geometry(f"{int(600*self.scale)}x{int(320*self.scale)}")
 
-        self.style = ttk.Style(self.root)
-        self.style.theme_use('default')
-        self.style.configure('TButton', background="#fae3d9")
-        self.style.configure('TEntry', fieldbackground="#fae3d9")
-        self.style.configure('TCheckbutton', background="#bbded6", indicatorcolor="#fae3d9", indicatordiameter=int(10*self.scale))
-        self.style.configure('TSpinbox', arrowsize=int(10*self.scale), arrowcolor="#61c0bf", fieldbackground="#fae3d9", background="#bbded6")
-        self.style.configure('TFrame', background="#bbded6")
-        self.style.configure('TLabel', background="#bbded6")
+        self.style = ttk.Style("solar")
 
         self.create_widgets()
 
@@ -60,10 +70,10 @@ class MainWindow:
         frame0.grid(row=0, column=0, sticky='ew', padx=padx, pady=pady)
 
         # 创建两个Label，分别用于显示版本和文档信息
-        self.ps_version_label = ttk.Label(frame0, text="", foreground='blue')
+        self.ps_version_label = ttk.Label(frame0, text="", foreground='white')
         self.ps_version_label.grid(row=0, column=0, padx=padx, sticky='w')
 
-        self.active_doc_label = ttk.Label(frame0, text="", foreground='blue')
+        self.active_doc_label = ttk.Label(frame0, text="", foreground='white')
         self.active_doc_label.grid(row=1, column=0, padx=padx, sticky='w')
 
         self.clean_info_label = ttk.Label(frame0, text="")
@@ -93,7 +103,7 @@ class MainWindow:
         auto_save_label.grid(row=0, column=0, padx=padx)
         self.auto_save_entry = ttk.Spinbox(combined_frame, from_=1, to=999, textvariable=self.auto_save_interval_var, width=padx)
         self.auto_save_entry.grid(row=0, column=1, sticky='ew')
-        auto_save_check = ttk.Checkbutton(combined_frame, text="自动备份", variable=self.auto_save_var)
+        auto_save_check = ttk.Checkbutton(combined_frame, text="自动备份", variable=self.auto_save_var, bootstyle="round-toggle")
         auto_save_check.grid(row=0, column=2, padx=padx)
 
         # 分隔符
@@ -135,7 +145,7 @@ class MainWindow:
         # Set the weight of the second column to a large number
         frame3.columnconfigure(1, weight=1)
 
-        link = ttk.Label(frame3, text="v0.1.0", cursor="hand2", foreground='blue')
+        link = ttk.Label(frame3, text="v0.1.0", cursor="hand2", foreground='white')
         link.grid(row=0, column=0, padx=padx, sticky='ew')
         link.bind("<Button-1>", self.open_link)
 
@@ -170,6 +180,19 @@ class MainWindow:
         self.auto_save_interval_var.trace_add("write", self.validate_auto_save_interval)
         self.auto_save_var.trace_add("write", self.update_auto_save_enabled)
         self.backup_retention_days_var.trace_add("write", self.validate_backup_retention_days)
+
+    def apply_theme_to_titlebar(self):
+        version = sys.getwindowsversion()
+
+        if version.major == 10 and version.build >= 22000:
+            # Set the title bar color to the background color on Windows 11 for better appearance
+            pywinstyles.change_header_color(self.root, "#1c1c1c")
+        elif version.major == 10:
+            pywinstyles.apply_style(self.root, "dark")
+
+            # A hacky way to update the title bar's color on Windows 10 (it doesn't update instantly like on Windows 11)
+            self.root.wm_attributes("-alpha", 0.99)
+            self.root.wm_attributes("-alpha", 1)
 
     def update_folder_path(self, *args):
         self.config_manager.set_folder_path(self.folder_path_var.get())
@@ -295,10 +318,12 @@ class MainWindow:
         self.auto_save_thread.start()
 
     def hide_window(self):
+        self.root.overrideredirect(True)
         self.root.withdraw()
 
     def show_window(self):
         self.root.deiconify()
+        self.root.overrideredirect(False)
 
     def open_backup_folder(self):
       backup_folder = self.folder_path_var.get()
@@ -314,12 +339,3 @@ class MainWindow:
     def exit_app(self):
         self.root.destroy()
         # self.root.quit()
-      
-
-def main():
-    root = tk.Tk()
-    app = MainWindow(root)
-    root.mainloop()
-
-if __name__ == "__main__":
-    main()

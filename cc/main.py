@@ -1,5 +1,4 @@
 import os
-import ctypes
 import tkinter as tk
 from tempfile import gettempdir
 import tkinter as tk
@@ -29,18 +28,12 @@ def main():
     with open(pid_file, 'w') as f:
         f.write(str(os.getpid()))
 
-    # fix dpi
-    ctypes.windll.shcore.SetProcessDpiAwareness(2)
-    # 获取屏幕的缩放比例
-    scale = ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100.0
-
-    # 创建并运行 GUI
-    root = tk.Tk()
-    app = MainWindow(root, scale)
-    root.mainloop()
-
-    # 清理 PID 文件
-    os.remove(pid_file)
+    try:
+        # 创建并运行 GUI
+        app = MainWindow() 
+    finally:
+        # 清理 PID 文件
+        os.remove(pid_file)
 
 if __name__ == '__main__':
     main()
