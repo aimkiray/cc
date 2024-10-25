@@ -56,12 +56,12 @@ class MainWindow:
         self.root.mainloop()
 
     def setup_ui(self):
-        self.root.title(self.title)
+        self.root.title(" " + self.title)
         self.root.iconbitmap(self.icon)
         
         self.root.geometry(f"{int(600*self.scale)}x{int(320*self.scale)}")
 
-        self.style = ttk.Style("solar")
+        self.style = ttk.Style("superhero")
 
         self.create_widgets()
 
@@ -122,8 +122,8 @@ class MainWindow:
         self.backup_retention_days_entry = ttk.Spinbox(combined_frame, from_=1, to=999, textvariable=self.backup_retention_days_var, width=padx)
         self.backup_retention_days_entry.grid(row=0, column=5, sticky='ew')
 
-        self.clean_button = ttk.Button(combined_frame, text="清理", command=self.start_cleanup)
-        self.clean_button.grid(row=0, column=6, padx=padx)
+        auto_clean = ttk.Checkbutton(combined_frame, text="自动清理", variable=self.auto_save_var, bootstyle="round-toggle")
+        auto_clean.grid(row=0, column=6, padx=padx)
 
         # Frame 1: Folder path selection
         frame1 = ttk.Frame(self.root)
@@ -155,11 +155,12 @@ class MainWindow:
         link.grid(row=0, column=0, padx=padx, sticky='ew')
         link.bind("<Button-1>", self.open_link)
 
-        save_button = ttk.Button(frame3, text="立即备份", command=self.start_save)
+        save_button = ttk.Button(frame3, text="立即备份", command=self.start_save, bootstyle="success")
         save_button.grid(row=0, column=2, padx=padx)
-        minimize_button = ttk.Button(frame3, text="最小化", command=self.hide_window)
-        minimize_button.grid(row=0, column=3, padx=padx)
-        exit_button = ttk.Button(frame3, text="退出", command=self.exit_button_clicked)
+        self.clean_button = ttk.Button(frame3, text="清理备份", command=self.start_cleanup, bootstyle="secondary")
+        self.clean_button.grid(row=0, column=3, padx=padx)
+
+        exit_button = ttk.Button(frame3, text="退出程序", command=self.exit_button_clicked)
         exit_button.grid(row=0, column=4, padx=padx)
 
         # Frame 5: Blank
