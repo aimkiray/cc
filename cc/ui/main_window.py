@@ -23,6 +23,13 @@ class MainWindow:
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
         # 获取屏幕的缩放比例
         self.scale = ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100.0
+        
+        # 初始窗口可见状态
+        self.visible = True
+        self.title = "CreativeCache"
+        self.icon = resource_path("resources\icon.ico")
+        self.tray = None
+        start_tray_icon(self)
 
         self.root = tk.Tk()
         # tksvg.load(self.root)
@@ -31,7 +38,6 @@ class MainWindow:
         # self.root.tk.call("set_theme", "dark")
         self.apply_theme_to_titlebar()
 
-        self.tray = start_tray_icon(resource_path("icon.ico"), "CreativeCache", self.show_window, self.hide_window, self.exit_app)
         self.cleanup_thread = None
         self.auto_save_job = None
         self.auto_save_thread = None
@@ -50,8 +56,8 @@ class MainWindow:
         self.root.mainloop()
 
     def setup_ui(self):
-        self.root.title("CreativeCache")
-        self.root.iconbitmap(resource_path("icon.ico"))
+        self.root.title(self.title)
+        self.root.iconbitmap(self.icon)
         
         self.root.geometry(f"{int(600*self.scale)}x{int(320*self.scale)}")
 
@@ -320,9 +326,15 @@ class MainWindow:
     def hide_window(self):
         self.root.overrideredirect(True)
         self.root.withdraw()
+        self.visible = False
+        if self.tray:
+            self.tray.update_menu()
 
     def show_window(self):
         self.root.deiconify()
+        self.visible = True
+        if self.tray:
+            self.tray.update_menu()
         self.root.overrideredirect(False)
 
     def open_backup_folder(self):
