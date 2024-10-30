@@ -39,13 +39,16 @@ class MainWindow:
         self.apply_theme_to_titlebar()
 
         self.cleanup_thread = None
+        self.cleanup_job = None
+        self.cleanup_info = None
         self.auto_save_job = None
         self.auto_save_thread = None
         # 创建变量
         self.folder_path_var = tk.StringVar()
         self.auto_save_interval_var = tk.IntVar()
-        self.auto_save_var = tk.IntVar()
-        self.backup_retention_days_var = tk.IntVar()
+        self.auto_save_var = tk.BooleanVar()
+        self.backup_clean_var = tk.BooleanVar()
+        self.backup_clean_interval_var = tk.IntVar()
         
         self.config_manager = ConfigManager()
         self.initialize_variables()
@@ -117,13 +120,15 @@ class MainWindow:
         separator.grid(row=0, column=3, sticky='ns')
 
         # 备份保留设置
-        backup_retention_days_label = ttk.Label(combined_frame, text="保留时间 \\ 天: ")
-        backup_retention_days_label.grid(row=0, column=4, padx=padx)
-        self.backup_retention_days_entry = ttk.Spinbox(combined_frame, from_=1, to=999, textvariable=self.backup_retention_days_var, width=padx)
-        self.backup_retention_days_entry.grid(row=0, column=5, sticky='ew')
+        backup_clean_interval_label = ttk.Label(combined_frame, text="保留时间 \\ 天: ")
+        backup_clean_interval_label.grid(row=0, column=4, padx=padx)
+        self.backup_clean_interval_entry = ttk.Spinbox(combined_frame, from_=1, to=999, textvariable=self.backup_clean_interval_var, width=padx)
+        self.backup_clean_interval_entry.grid(row=0, column=5, sticky='ew')
 
-        auto_clean = ttk.Checkbutton(combined_frame, text="自动清理", variable=self.auto_save_var, bootstyle="round-toggle")
-        auto_clean.grid(row=0, column=6, padx=padx)
+        self.backup_clean_button = ttk.Checkbutton(combined_frame, text="自动清理", bootstyle="round-toggle")
+        self.backup_clean_button.grid(row=0, column=6, padx=padx)
+        self.backup_clean_button.bind("<Button-1>", self.confirm_cleanup)
+        self.backup_clean_button.state(['selected' if self.backup_clean_var.get() else '!selected'])
 
         # Frame 1: Folder path selection
         frame1 = ttk.Frame(self.root)
@@ -151,7 +156,7 @@ class MainWindow:
         # Set the weight of the second column to a large number
         frame3.columnconfigure(1, weight=1)
 
-        link = ttk.Label(frame3, text="v0.1.0", cursor="hand2", foreground='white')
+        link = ttk.Label(frame3, text="v0.2.1", cursor="hand2", foreground='white')
         link.grid(row=0, column=0, padx=padx, sticky='ew')
         link.bind("<Button-1>", self.open_link)
 
@@ -173,20 +178,22 @@ class MainWindow:
         """Initializes the Tkinter variables with values from the configuration."""
         # Load values from the configuration manager
         folder_path = self.config_manager.get_folder_path()
-        auto_save_enabled, auto_save_interval = self.config_manager.get_auto_save_settings()
-        backup_retention_days = self.config_manager.get_backup_retention_days()
+        auto_save, auto_save_interval = self.config_manager.get_auto_save_settings()
+        backup_clean, backup_clean_interval = self.config_manager.get_backup_clean_settings()
 
         # Assign values to Tkinter variables
         self.folder_path_var = tk.StringVar(value=folder_path)
+        self.auto_save_var = tk.BooleanVar(value=auto_save)
         self.auto_save_interval_var = tk.IntVar(value=auto_save_interval)
-        self.auto_save_var = tk.IntVar(value=int(auto_save_enabled))
-        self.backup_retention_days_var = tk.IntVar(value=backup_retention_days)
+        self.backup_clean_var = tk.BooleanVar(value=backup_clean)
+        self.backup_clean_interval_var = tk.IntVar(value=backup_clean_interval)
 
         # Adding traces
         self.folder_path_var.trace_add("write", self.update_folder_path)
         self.auto_save_interval_var.trace_add("write", self.validate_auto_save_interval)
-        self.auto_save_var.trace_add("write", self.update_auto_save_enabled)
-        self.backup_retention_days_var.trace_add("write", self.validate_backup_retention_days)
+        self.auto_save_var.trace_add("write", self.update_auto_save)
+        self.backup_clean_var.trace_add("write", self.update_backup_clean)
+        self.backup_clean_interval_var.trace_add("write", self.validate_backup_clean_interval)
 
     def apply_theme_to_titlebar(self):
         version = sys.getwindowsversion()
@@ -205,30 +212,49 @@ class MainWindow:
         self.config_manager.set_folder_path(self.folder_path_var.get())
 
     def validate_auto_save_interval(self, *args):
-        interval = self.auto_save_interval_var.get()
-        if isinstance(interval, int) and interval > 0:
+        try:
+            interval = self.auto_save_interval_var.get()
+        except tk.TclError:
+            if self.auto_save_entry.get().strip() != "":
+                messagebox.showerror("Invalid Input", "Auto save interval must be a positive integer.")
+                self.auto_save_interval_var.set(self.config_manager.get_auto_save_settings()[1])
+            return
+        
+        if interval > 0 and interval < 99999:
             self.update_auto_save_interval()
         else:
-            messagebox.showerror("Invalid Input", "Auto save interval must be a positive integer.")
-            self.auto_save_interval_var.set(self.config_manager.get_auto_save_settings()[1])  # Reset to last valid value
+            messagebox.showerror("Invalid Input", "Auto save interval must be between 1 and 99999.")
+            # Reset to last valid value
+            self.auto_save_interval_var.set(self.config_manager.get_auto_save_settings()[1])
 
     def update_auto_save_interval(self):
-        self.config_manager.set_auto_save_settings(self.auto_save_var.get() == 1, self.auto_save_interval_var.get())
+        self.config_manager.set_auto_save_settings(self.auto_save_var.get(), self.auto_save_interval_var.get())
 
-    def update_auto_save_enabled(self, *args):
-        self.config_manager.set_auto_save_settings(self.auto_save_var.get() == 1, self.auto_save_interval_var.get())
+    def update_auto_save(self, *args):
+        self.config_manager.set_auto_save_settings(self.auto_save_var.get(), self.auto_save_interval_var.get())
         self.handle_auto_save()
 
-    def validate_backup_retention_days(self, *args):
-        days = self.backup_retention_days_var.get()
-        if isinstance(days, int) and days >= 0:
-            self.update_backup_retention_days()
+    def validate_backup_clean_interval(self, *args):
+        try:
+            interval = self.backup_clean_interval_var.get()
+        except tk.TclError:
+            if self.backup_clean_interval_entry.get().strip() != "":
+                messagebox.showerror("Invalid Input", "Backup clean interval must be a positive integer.")
+                self.backup_clean_interval_var.set(self.config_manager.get_backup_clean_settings()[1])
+            return
+        
+        if interval > 0 and interval < 99999:
+            self.update_backup_clean_interval()
         else:
-            messagebox.showerror("Invalid Input", "Backup retention days must be a non-negative integer.")
-            self.backup_retention_days_var.set(self.config_manager.get_backup_retention_days())
+            messagebox.showerror("Invalid Input", "Backup clean interval must be between 1 and 99999.")
+            self.backup_clean_interval_var.set(self.config_manager.get_backup_clean_settings()[1])
 
-    def update_backup_retention_days(self):
-        self.config_manager.set_backup_retention_days(self.backup_retention_days_var.get())
+    def update_backup_clean(self, *args):
+        self.config_manager.set_backup_clean_settings(self.backup_clean_var.get(), self.backup_clean_interval_var.get())
+        self.handle_cleanup()
+
+    def update_backup_clean_interval(self):
+        self.config_manager.set_backup_clean_settings(self.backup_clean_var.get(), self.backup_clean_interval_var.get())
 
     def update_ps_info(self):
         ps_version, active_doc = get_ps_info()
@@ -244,11 +270,34 @@ class MainWindow:
         self.clean_info_label.config(text=f"清理完成，共删除 {cleaned_files_count} 个文件。")
         # 清理完成，启用按钮并更新提示信息
         self.clean_button.config(state=tk.NORMAL)
-        self.root.after(8000, lambda: self.clean_info_label.config(text=""))
+        if self.cleanup_info is not None:
+            self.root.after_cancel(self.cleanup_info)
+        self.cleanup_info = self.root.after(8000, lambda: self.clean_info_label.config(text=""))
 
-    def start_cleanup(self):
-        if not messagebox.askyesno("确认", f"您确定要清理吗？本操作会清理备份文件夹中所有以_psbackup结尾，并且时间戳大于{str(self.backup_retention_days_var.get())}天的psd文件！为保险起见，请尽量不要在备份目录存放其他文件！！！"):
+    def confirm_cleanup(self, event):
+        current_value = self.backup_clean_var.get()
+        if current_value:
+            self.backup_clean_var.set(False)
+            # self.backup_clean_button.state(['!selected'])
             return
+            
+        # 阻止自动切换状态
+        event.widget.state(['!alternate'])
+
+        # 弹出对话框询问用户
+        response = messagebox.askyesno("确认", f"您确定要开启自动清理吗？本操作会清理备份文件夹中所有以_psbackup结尾，并且时间戳大于{str(self.backup_clean_interval_var.get())}天的psd文件！为保险起见，请尽量不要在备份目录存放其他文件！！！")
+        if response:
+            # 如果用户点击“是”，则切换变量的值
+            self.backup_clean_var.set(True)
+            # 更新Checkbutton的显示状态
+            self.backup_clean_button.state(['selected'])
+
+
+    def start_cleanup(self, silent=False):
+        if not silent:
+            if not messagebox.askyesno("确认", f"您确定要清理吗？本操作会清理备份文件夹中所有以_psbackup结尾，并且时间戳大于{str(self.backup_clean_interval_var.get())}天的psd文件！为保险起见，请尽量不要在备份目录存放其他文件！！！"):
+                return
+
         if self.cleanup_thread is not None and self.cleanup_thread.is_alive():
             logging.info("Cleanup already in progress.")
             return
@@ -256,13 +305,41 @@ class MainWindow:
         self.clean_button.config(state=tk.DISABLED)
         self.clean_info_label.config(text="清理中...")
 
-        self.cleanup_thread = threading.Thread(target=lambda: clean_old_backups(self.folder_path_var.get(), self.backup_retention_days_var.get(), self.finish_cleanup))
+        self.cleanup_thread = threading.Thread(target=lambda: clean_old_backups(self.folder_path_var.get(), self.backup_clean_interval_var.get(), self.finish_cleanup))
         self.cleanup_thread.daemon = True
         self.cleanup_thread.start()
+
+    def handle_cleanup(self):
+        if self.backup_clean_var.get():
+            try:
+                # TODO 自动清理间隔暂时设置为比自动保存稍长一点
+                interval = int(self.auto_save_interval_var.get())
+                interval_ms = interval * 70000  # 将分钟转换为毫秒
+                if self.cleanup_job is not None:
+                    self.root.after_cancel(self.cleanup_job)
+                self.cleanup_schedule(interval_ms)
+                logging.info(f"Auto cleanup scheduled every {interval} minutes.")
+            except ValueError:
+                messagebox.showerror("错误", "请输入有效的数字")
+        else:
+            if self.cleanup_job is not None:
+                self.root.after_cancel(self.cleanup_job)
+                self.cleanup_job = None
+            logging.info("Auto cleanup disabled.")
+
+    def cleanup_schedule(self, interval_ms):
+        self.start_cleanup(silent=True)
+        # 确保即使在异常发生时也能重新调度
+        try:
+            self.cleanup_job = self.root.after(interval_ms, self.cleanup_schedule, interval_ms)
+        except Exception as e:
+            logging.error(f"Error in scheduling auto save: {str(e)}")
+        # logging.info("Auto-save executed and rescheduled.")
 
     def browse_folder(self):
         folder_selected = filedialog.askdirectory()
         if folder_selected:
+            print(folder_selected)
             self.config_manager.set_folder_path(folder_selected)
 
     def open_link(self, event):
@@ -294,21 +371,21 @@ class MainWindow:
                 messagebox.showerror("错误", f"保存文件时出错，请检查日志文件")
 
     def handle_auto_save(self):
-        if self.auto_save_var.get() == 1:
+        if self.auto_save_var.get():
             try:
                 interval = int(self.auto_save_interval_var.get())
-                interval_ms = interval * 60 * 1000  # 将分钟转换为毫秒
+                interval_ms = interval * 60000  # 将分钟转换为毫秒
                 if self.auto_save_job is not None:
                     self.root.after_cancel(self.auto_save_job)
                 self.auto_save_schedule(interval_ms)
-                logging.info(f"Auto-save scheduled every {interval} minutes.")
+                logging.info(f"Auto save scheduled every {interval} minutes.")
             except ValueError:
                 messagebox.showerror("错误", "请输入有效的数字")
         else:
             if self.auto_save_job is not None:
                 self.root.after_cancel(self.auto_save_job)
                 self.auto_save_job = None
-            logging.info("Auto-save disabled.")
+            logging.info("Auto save disabled.")
 
     def auto_save_schedule(self, interval_ms):
         self.start_save(silent=True)

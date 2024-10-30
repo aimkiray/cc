@@ -11,9 +11,10 @@ class ConfigManager:
         self.config = configparser.ConfigParser()
         self.defaults = {
             'folder_path': '',
-            'auto_save_enabled': 'False',
+            'auto_save': 'False',
             'auto_save_interval': '30',
-            'backup_retention_days': '20'
+            'backup_clean': 'False',
+            'backup_clean_interval': '20'
         }
         self.load_config()
 
@@ -40,20 +41,23 @@ class ConfigManager:
         self.save_config()
 
     def get_auto_save_settings(self) -> Tuple[bool, int]:
-        enabled = self.config.getboolean('Settings', 'auto_save_enabled')
+        enabled = self.config.getboolean('Settings', 'auto_save')
         interval = self.config.getint('Settings', 'auto_save_interval')
         return enabled, interval
 
     def set_auto_save_settings(self, enabled: bool, interval: int) -> None:
-        self.config.set('Settings', 'auto_save_enabled', str(enabled))
+        self.config.set('Settings', 'auto_save', str(enabled))
         self.config.set('Settings', 'auto_save_interval', str(interval))
         self.save_config()
 
-    def get_backup_retention_days(self) -> int:
-        return self.config.getint('Settings', 'backup_retention_days')
+    def get_backup_clean_settings(self) -> Tuple[bool, int]:
+        enabled = self.config.getboolean('Settings', 'backup_clean')
+        interval = self.config.getint('Settings', 'backup_clean_interval')
+        return enabled, interval
 
-    def set_backup_retention_days(self, days: int) -> None:
-        self.config.set('Settings', 'backup_retention_days', str(days))
+    def set_backup_clean_settings(self, enabled: bool, interval: int) -> None:
+        self.config.set('Settings', 'backup_clean', str(enabled))
+        self.config.set('Settings', 'backup_clean_interval', str(interval))
         self.save_config()
 
     def save_config(self) -> None:
