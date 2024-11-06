@@ -1,3 +1,3 @@
-from .main import main
+from cc.main import main
 
 main()

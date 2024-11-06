@@ -3,9 +3,9 @@ import tkinter as tk
 from tempfile import gettempdir
 import tkinter as tk
 from tkinter import messagebox
-from .ui.main_window import MainWindow
-from .utils.logger import setup_logging
-from .utils.process import is_process_running
+from cc.ui.main_window import MainWindow
+from cc.utils.logger import setup_logging
+from cc.utils.process import is_process_running
 
 def main():
     setup_logging()

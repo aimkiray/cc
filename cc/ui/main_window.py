@@ -11,11 +11,11 @@ from tkinter import filedialog, messagebox
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 
-from ..utils.cleanup import clean_old_backups
-from ..utils.path import resource_path
-from ..ps_manager import save_psd_as, get_ps_info, thread_save_psd_as
-from .tray_icon import start_tray_icon
-from ..config import ConfigManager
+from cc.utils.cleanup import clean_old_backups
+from cc.utils.path import resource_path
+from cc.ps_manager import save_psd_as, get_ps_info, thread_save_psd_as
+from cc.ui.tray_icon import start_tray_icon
+from cc.config import ConfigManager
 
 class MainWindow:
     def __init__(self):
@@ -32,10 +32,7 @@ class MainWindow:
         start_tray_icon(self)
 
         self.root = tk.Tk()
-        # tksvg.load(self.root)
-        # Import the tcl file
-        # self.root.tk.call('source', resource_path('cc/ui/sun-valley.tcl'))
-        # self.root.tk.call("set_theme", "dark")
+        # self.root.overrideredirect(True)
         self.apply_theme_to_titlebar()
 
         self.cleanup_thread = None
@@ -64,7 +61,12 @@ class MainWindow:
         
         self.root.geometry(f"{int(600*self.scale)}x{int(320*self.scale)}")
 
-        self.style = ttk.Style("superhero")
+        # 窗口可以拖动
+        self.root.bind("<ButtonPress-1>", self.start_move)
+        self.root.bind("<ButtonRelease-1>", self.stop_move)
+        self.root.bind("<B1-Motion>", self.on_move)
+
+        self.style = ttk.Style("doughnut")
 
         self.create_widgets()
 
@@ -79,10 +81,10 @@ class MainWindow:
         frame0.grid(row=0, column=0, sticky='ew', padx=padx, pady=pady)
 
         # 创建两个Label，分别用于显示版本和文档信息
-        self.ps_version_label = ttk.Label(frame0, text="", foreground='white')
+        self.ps_version_label = ttk.Label(frame0, text="", foreground='black')
         self.ps_version_label.grid(row=0, column=0, padx=padx, sticky='w')
 
-        self.active_doc_label = ttk.Label(frame0, text="", foreground='white')
+        self.active_doc_label = ttk.Label(frame0, text="", foreground='black')
         self.active_doc_label.grid(row=1, column=0, padx=padx, sticky='w')
 
         self.clean_info_label = ttk.Label(frame0, text="")
@@ -156,16 +158,16 @@ class MainWindow:
         # Set the weight of the second column to a large number
         frame3.columnconfigure(1, weight=1)
 
-        link = ttk.Label(frame3, text="v0.2.1", cursor="hand2", foreground='white')
+        link = ttk.Label(frame3, text="v0.2.1", cursor="hand2", foreground='#dc888e')
         link.grid(row=0, column=0, padx=padx, sticky='ew')
         link.bind("<Button-1>", self.open_link)
 
-        save_button = ttk.Button(frame3, text="立即备份", command=self.start_save, bootstyle="success")
+        save_button = ttk.Button(frame3, text="立即备份", command=self.start_save, bootstyle="secondary")
         save_button.grid(row=0, column=2, padx=padx)
-        self.clean_button = ttk.Button(frame3, text="清理备份", command=self.start_cleanup, bootstyle="secondary")
+        self.clean_button = ttk.Button(frame3, text="清理备份", command=self.start_cleanup, bootstyle="warning")
         self.clean_button.grid(row=0, column=3, padx=padx)
 
-        exit_button = ttk.Button(frame3, text="退出程序", command=self.exit_button_clicked)
+        exit_button = ttk.Button(frame3, text="退出程序", command=self.exit_button_clicked, bootstyle="info")
         exit_button.grid(row=0, column=4, padx=padx)
 
         # Frame 5: Blank
@@ -194,6 +196,23 @@ class MainWindow:
         self.auto_save_var.trace_add("write", self.update_auto_save)
         self.backup_clean_var.trace_add("write", self.update_backup_clean)
         self.backup_clean_interval_var.trace_add("write", self.validate_backup_clean_interval)
+
+    def start_move(self, event):
+        self.root.x = event.x
+        self.root.y = event.y
+
+    def stop_move(self, event):
+        self.root.x = None
+        self.root.y = None
+
+    def on_move(self, event):
+        if event.widget != self.root:
+            return
+        deltax = event.x - self.root.x
+        deltay = event.y - self.root.y
+        x = self.root.winfo_x() + deltax
+        y = self.root.winfo_y() + deltay
+        self.root.geometry(f"+{x}+{y}")
 
     def apply_theme_to_titlebar(self):
         version = sys.getwindowsversion()
@@ -339,8 +358,8 @@ class MainWindow:
     def browse_folder(self):
         folder_selected = filedialog.askdirectory()
         if folder_selected:
-            print(folder_selected)
             self.config_manager.set_folder_path(folder_selected)
+            self.folder_path_var.set(folder_selected)
 
     def open_link(self, event):
         webbrowser.open_new(r"https://github.com/aimkiray/cc")
@@ -368,7 +387,7 @@ class MainWindow:
             if backup_result:
                 messagebox.showinfo("成功", f"文件已成功备份到：{backup_result}")
             else:
-                messagebox.showerror("错误", f"保存文件时出错，请检查日志文件")
+                messagebox.showerror("错误", f"备份未成功：Photoshop 未准备就绪。请查阅日志文件以了解详细信息。")
 
     def handle_auto_save(self):
         if self.auto_save_var.get():
