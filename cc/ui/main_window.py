@@ -26,7 +26,7 @@ class MainWindow:
         
         # 初始窗口可见状态
         self.visible = True
-        self.title = "CreativeCache"
+        self.title = "Creative Cache"
         self.icon = resource_path("resources\icon.ico")
         self.tray = None
         start_tray_icon(self)
@@ -114,8 +114,10 @@ class MainWindow:
         auto_save_label.grid(row=0, column=0, padx=padx)
         self.auto_save_entry = ttk.Spinbox(combined_frame, from_=1, to=999, textvariable=self.auto_save_interval_var, width=padx)
         self.auto_save_entry.grid(row=0, column=1, sticky='ew')
-        auto_save_check = ttk.Checkbutton(combined_frame, text="自动备份", variable=self.auto_save_var, bootstyle="round-toggle")
-        auto_save_check.grid(row=0, column=2, padx=padx)
+        self.auto_save_button = ttk.Checkbutton(combined_frame, text="自动备份", bootstyle="round-toggle")
+        self.auto_save_button.grid(row=0, column=2, padx=padx)
+        self.auto_save_button.bind("<Button-1>", self.confirm_backup)
+        self.auto_save_button.state(['selected' if self.auto_save_var.get() else '!selected'])
 
         # 分隔符
         separator = ttk.Separator(combined_frame, orient='vertical')
@@ -293,28 +295,38 @@ class MainWindow:
             self.root.after_cancel(self.cleanup_info)
         self.cleanup_info = self.root.after(8000, lambda: self.clean_info_label.config(text=""))
 
+
     def confirm_cleanup(self, event):
+        backup_path = self.folder_path_var.get()
+        if not os.path.isdir(backup_path):
+            messagebox.showerror("错误", "无效的备份目录")
+            return "break"
         current_value = self.backup_clean_var.get()
         if current_value:
             self.backup_clean_var.set(False)
-            # self.backup_clean_button.state(['!selected'])
-            return
-            
-        # 阻止自动切换状态
-        event.widget.state(['!alternate'])
+            self.backup_clean_button.state(['!selected'])
+            return "break"
 
         # 弹出对话框询问用户
-        response = messagebox.askyesno("确认", f"您确定要开启自动清理吗？本操作会清理备份文件夹中所有以_psbackup结尾，并且时间戳大于{str(self.backup_clean_interval_var.get())}天的psd文件！为保险起见，请尽量不要在备份目录存放其他文件！！！")
+        response = messagebox.askyesno("确认", f"您确定要开启自动清理吗？本操作会清理{backup_path}目录中所有以_psbackup结尾，并且时间戳大于{str(self.backup_clean_interval_var.get())}天的psd文件！为保险起见，请尽量不要在备份目录存放其他文件！！！")
         if response:
-            # 如果用户点击“是”，则切换变量的值
+            # 切换变量的值
             self.backup_clean_var.set(True)
             # 更新Checkbutton的显示状态
             self.backup_clean_button.state(['selected'])
 
+            return "break"
+
 
     def start_cleanup(self, silent=False):
+        backup_path = self.folder_path_var.get()
+        if not os.path.isdir(backup_path):
+            logging.error("Invalid backup directory.")
+            if not silent:
+                messagebox.showerror("错误", "无效的备份目录")
+            return
         if not silent:
-            if not messagebox.askyesno("确认", f"您确定要清理吗？本操作会清理备份文件夹中所有以_psbackup结尾，并且时间戳大于{str(self.backup_clean_interval_var.get())}天的psd文件！为保险起见，请尽量不要在备份目录存放其他文件！！！"):
+            if not messagebox.askyesno("确认", f"您确定要清理吗？本操作会清理{backup_path}目录中所有以_psbackup结尾，并且时间戳大于{str(self.backup_clean_interval_var.get())}天的psd文件！为保险起见，请尽量不要在备份目录存放其他文件！！！"):
                 return
 
         if self.cleanup_thread is not None and self.cleanup_thread.is_alive():
@@ -324,7 +336,7 @@ class MainWindow:
         self.clean_button.config(state=tk.DISABLED)
         self.clean_info_label.config(text="清理中...")
 
-        self.cleanup_thread = threading.Thread(target=lambda: clean_old_backups(self.folder_path_var.get(), self.backup_clean_interval_var.get(), self.finish_cleanup))
+        self.cleanup_thread = threading.Thread(target=lambda: clean_old_backups(backup_path, self.backup_clean_interval_var.get(), self.finish_cleanup))
         self.cleanup_thread.daemon = True
         self.cleanup_thread.start()
 
@@ -364,6 +376,22 @@ class MainWindow:
     def open_link(self, event):
         webbrowser.open_new(r"https://github.com/aimkiray/cc")
 
+    def confirm_backup(self, event):
+        backup_path = self.folder_path_var.get()
+        if not os.path.isdir(backup_path):
+            messagebox.showerror("错误", "无效的备份目录")
+            return "break"
+        current_value = self.auto_save_var.get()
+        if current_value:
+            self.auto_save_var.set(False)
+            self.auto_save_button.state(['!selected'])
+            return "break"
+
+        self.auto_save_var.set(True)
+        self.auto_save_button.state(['selected'])
+        return "break"
+
+
     def start_save(self, silent=False):
         if self.auto_save_thread and self.auto_save_thread.is_alive():
             logging.info("An automatic backup operation is already in progress, please try again later or adjust the automatic backup interval.")
@@ -371,18 +399,18 @@ class MainWindow:
                 messagebox.showinfo("信息", "已有一个备份操作正在进行，请稍后再试。")
             return
         
-        folder_path = self.folder_path_var.get()
-        if not folder_path:
-            logging.error("No backup directory specified.")
+        backup_path = self.folder_path_var.get()
+        if not os.path.isdir(backup_path):
+            logging.error("Invalid backup directory.")
             if not silent:
-                messagebox.showerror("错误", "请先选择文件保存目录。")
+                messagebox.showerror("错误", "无效的备份目录")
             return
         
         if silent:
             # 后台自动备份，不需要提示
-            self.run_auto_save(folder_path)
+            self.run_auto_save(backup_path)
         else:
-            backup_result = save_psd_as(folder_path)
+            backup_result = save_psd_as(backup_path)
 
             if backup_result:
                 messagebox.showinfo("成功", f"文件已成功备份到：{backup_result}")
