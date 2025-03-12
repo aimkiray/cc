@@ -40,6 +40,11 @@ class MainWindow:
         self.cleanup_info = None
         self.auto_save_job = None
         self.auto_save_thread = None
+
+        # PS 是否为第一次启动
+        self.first_psd = True
+        # PS 信息获取尝试次数
+        self.ps_check_count = 0
         # 创建变量
         self.folder_path_var = tk.StringVar()
         self.auto_save_interval_var = tk.IntVar()
@@ -160,7 +165,7 @@ class MainWindow:
         # Set the weight of the second column to a large number
         frame3.columnconfigure(1, weight=1)
 
-        link = ttk.Label(frame3, text="v0.2.1", cursor="hand2", foreground='#dc888e')
+        link = ttk.Label(frame3, text="v0.2.2", cursor="hand2", foreground='#dc888e')
         link.grid(row=0, column=0, padx=padx, sticky='ew')
         link.bind("<Button-1>", self.open_link)
 
@@ -279,6 +284,23 @@ class MainWindow:
 
     def update_ps_info(self):
         ps_version, active_doc = get_ps_info()
+        ps_unavailable = ps_version == "Unavailable" and active_doc == "No documents open"
+
+        if self.first_psd:
+            if not ps_unavailable:
+                # 第一次检测到有文档时触发保存
+                self.first_psd = False
+                self.start_save(True)
+        else:
+            if ps_unavailable:
+                # 连续检测3次，防止窗口拖动期间 COM 对象无法访问
+                self.ps_check_count += 1
+                if self.ps_check_count >= 3:
+                    self.ps_check_count = 0
+                    self.first_psd = True
+            else:
+                self.ps_check_count = 0
+        
         if self.ps_version_label.winfo_exists() and self.active_doc_label.winfo_exists():
             self.ps_version_label.config(text=f"PS Version: {ps_version}")
             self.active_doc_label.config(text=f"Active Doc: {active_doc}")
@@ -349,7 +371,7 @@ class MainWindow:
                 if self.cleanup_job is not None:
                     self.root.after_cancel(self.cleanup_job)
                 self.cleanup_schedule(interval_ms)
-                logging.info(f"Auto cleanup scheduled every {interval} minutes.")
+                logging.info(f"Auto cleanup scheduled every {interval} minutes, deleting backups older than {self.backup_clean_interval_var.get()} days.")
             except ValueError:
                 messagebox.showerror("错误", "请输入有效的数字")
         else:

@@ -21,9 +21,8 @@ def save_psd_as(folder_path):
 
         doc = psApp.ActiveDocument
         original_name = doc.Name
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         new_filename = f"{original_name.split('.')[0]}_{timestamp}_psbackup.psd"
-        # full_path = f"{folder_path}/{new_filename}"
         full_path = os.path.join(folder_path, new_filename)
 
         psdOptions = win32com.client.Dispatch("Photoshop.PhotoshopSaveOptions")
@@ -50,7 +49,7 @@ def get_ps_info():
         # 尝试连接到正在运行的 Photoshop 实例
         ps_app = win32com.client.GetActiveObject("Photoshop.Application")
         ps_version = ps_app.Version
-        active_doc = ps_app.ActiveDocument.Name if ps_app.Documents.Count > 0 else "无"
+        active_doc = ps_app.ActiveDocument.Name if ps_app.Documents.Count > 0 else "No documents open"
     except Exception:
         ps_version = "Unavailable"
         active_doc = "No documents open"
