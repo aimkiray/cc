@@ -43,6 +43,7 @@ class MainWindow:
 
         # PS 是否为第一次启动
         self.first_psd = True
+        self.last_active_doc = None
         # PS 信息获取尝试次数
         self.ps_check_count = 0
         # 创建变量
@@ -287,10 +288,13 @@ class MainWindow:
         ps_unavailable = ps_version == "Unavailable" and active_doc == "No documents open"
 
         if self.first_psd:
-            if not ps_unavailable:
+            if not ps_unavailable and active_doc != "No documents open":
+                # 记录首次检测到的文档名称
+                self.last_active_doc = active_doc
                 # 第一次检测到有文档时触发保存
                 self.first_psd = False
-                self.start_save(True)
+                logging.info(f"First PSD {active_doc} detected. Saving...")
+                self.start_save(silent=True)
         else:
             if ps_unavailable:
                 # 连续检测3次，防止窗口拖动期间 COM 对象无法访问
@@ -299,7 +303,10 @@ class MainWindow:
                     self.ps_check_count = 0
                     self.first_psd = True
             else:
-                self.ps_check_count = 0
+                # 仅在文档实际变更时重置计数器
+                if active_doc != self.last_active_doc:
+                    self.ps_check_count = 0
+                    self.last_active_doc = active_doc
         
         if self.ps_version_label.winfo_exists() and self.active_doc_label.winfo_exists():
             self.ps_version_label.config(text=f"PS Version: {ps_version}")
@@ -446,7 +453,8 @@ class MainWindow:
                 interval_ms = interval * 60000  # 将分钟转换为毫秒
                 if self.auto_save_job is not None:
                     self.root.after_cancel(self.auto_save_job)
-                self.auto_save_schedule(interval_ms)
+                # 立即启动第一次自动保存
+                self.auto_save_job = self.root.after(0, self.auto_save_schedule, interval_ms)
                 logging.info(f"Auto save scheduled every {interval} minutes.")
             except ValueError:
                 messagebox.showerror("错误", "请输入有效的数字")
@@ -457,13 +465,13 @@ class MainWindow:
             logging.info("Auto save disabled.")
 
     def auto_save_schedule(self, interval_ms):
+        # 执行当前备份
         self.start_save(silent=True)
-        # 确保即使在异常发生时也能重新调度
+        # 调度下一次备份
         try:
             self.auto_save_job = self.root.after(interval_ms, self.auto_save_schedule, interval_ms)
         except Exception as e:
             logging.error(f"Error in scheduling auto save: {str(e)}")
-        # logging.info("Auto-save executed and rescheduled.")
 
     def run_auto_save(self, folder_path):
         self.auto_save_thread = threading.Thread(target=thread_save_psd_as, args=(folder_path,))
