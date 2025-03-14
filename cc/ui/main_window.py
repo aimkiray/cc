@@ -43,7 +43,7 @@ class MainWindow:
 
         # PS 是否为第一次启动
         self.first_psd = True
-        self.last_active_doc = None
+        self.backed_up_docs = set()
         # PS 信息获取尝试次数
         self.ps_check_count = 0
         # 创建变量
@@ -87,10 +87,10 @@ class MainWindow:
         frame0.grid(row=0, column=0, sticky='ew', padx=padx, pady=pady)
 
         # 创建两个Label，分别用于显示版本和文档信息
-        self.ps_version_label = ttk.Label(frame0, text="", foreground='black')
+        self.ps_version_label = ttk.Label(frame0, text="PS Version: Unavailable", foreground='black')
         self.ps_version_label.grid(row=0, column=0, padx=padx, sticky='w')
 
-        self.active_doc_label = ttk.Label(frame0, text="", foreground='black')
+        self.active_doc_label = ttk.Label(frame0, text="Active Doc: No open documents", foreground='black')
         self.active_doc_label.grid(row=1, column=0, padx=padx, sticky='w')
 
         self.clean_info_label = ttk.Label(frame0, text="")
@@ -184,6 +184,14 @@ class MainWindow:
 
         self.root.protocol("WM_DELETE_WINDOW", self.hide_window)
 
+    def debounce(self, func, wait=300):
+        """防抖装饰器工厂"""
+        def decorated(*args, **kwargs):
+            if hasattr(decorated, '_timer'):
+                self.root.after_cancel(decorated._timer)
+            decorated._timer = self.root.after(wait, func, *args, **kwargs)
+        return decorated
+
     def initialize_variables(self):
         """Initializes the Tkinter variables with values from the configuration."""
         # Load values from the configuration manager
@@ -199,11 +207,11 @@ class MainWindow:
         self.backup_clean_interval_var = tk.IntVar(value=backup_clean_interval)
 
         # Adding traces
-        self.folder_path_var.trace_add("write", self.update_folder_path)
-        self.auto_save_interval_var.trace_add("write", self.validate_auto_save_interval)
-        self.auto_save_var.trace_add("write", self.update_auto_save)
-        self.backup_clean_var.trace_add("write", self.update_backup_clean)
-        self.backup_clean_interval_var.trace_add("write", self.validate_backup_clean_interval)
+        self.folder_path_var.trace_add("write", self.debounce(self.update_folder_path, 500))
+        self.auto_save_interval_var.trace_add("write", self.debounce(self.validate_auto_save_interval, 500))
+        self.auto_save_var.trace_add("write", self.debounce(self.update_auto_save, 500))
+        self.backup_clean_var.trace_add("write", self.debounce(self.update_backup_clean, 500))
+        self.backup_clean_interval_var.trace_add("write", self.debounce(self.validate_backup_clean_interval, 500))
 
     def start_move(self, event):
         self.root.x = event.x
@@ -241,40 +249,39 @@ class MainWindow:
     def validate_auto_save_interval(self, *args):
         try:
             interval = self.auto_save_interval_var.get()
-        except tk.TclError:
-            if self.auto_save_entry.get().strip() != "":
-                messagebox.showerror("Invalid Input", "Auto save interval must be a positive integer.")
+            if 0 < interval < 99999:
+                self.update_auto_save_interval()
+            else:
+                raise ValueError
+        except (tk.TclError, ValueError):
+            current_text = self.auto_save_entry.get().strip()
+            if current_text:
+                messagebox.showerror("Invalid Input", "Auto save interval must be between 1 and 99999.")
+                # Reset to last valid value
                 self.auto_save_interval_var.set(self.config_manager.get_auto_save_settings()[1])
-            return
-        
-        if interval > 0 and interval < 99999:
-            self.update_auto_save_interval()
-        else:
-            messagebox.showerror("Invalid Input", "Auto save interval must be between 1 and 99999.")
-            # Reset to last valid value
-            self.auto_save_interval_var.set(self.config_manager.get_auto_save_settings()[1])
-
-    def update_auto_save_interval(self):
-        self.config_manager.set_auto_save_settings(self.auto_save_var.get(), self.auto_save_interval_var.get())
 
     def update_auto_save(self, *args):
         self.config_manager.set_auto_save_settings(self.auto_save_var.get(), self.auto_save_interval_var.get())
         self.handle_auto_save()
 
+    def update_auto_save_interval(self, *args):
+        self.config_manager.set_auto_save_settings(self.auto_save_var.get(), self.auto_save_interval_var.get())
+        if self.auto_save_var.get():
+            self.handle_auto_save()
+
     def validate_backup_clean_interval(self, *args):
         try:
             interval = self.backup_clean_interval_var.get()
-        except tk.TclError:
-            if self.backup_clean_interval_entry.get().strip() != "":
-                messagebox.showerror("Invalid Input", "Backup clean interval must be a positive integer.")
+            if 0 < interval < 99999:
+                self.update_backup_clean_interval()
+            else:
+                raise ValueError
+        except (tk.TclError, ValueError):
+            current_text = self.backup_clean_interval_entry.get().strip()
+            if current_text:
+                messagebox.showerror("Invalid Input", "Backup clean interval must be between 1 and 99999.")
+                # Reset to last valid value
                 self.backup_clean_interval_var.set(self.config_manager.get_backup_clean_settings()[1])
-            return
-        
-        if interval > 0 and interval < 99999:
-            self.update_backup_clean_interval()
-        else:
-            messagebox.showerror("Invalid Input", "Backup clean interval must be between 1 and 99999.")
-            self.backup_clean_interval_var.set(self.config_manager.get_backup_clean_settings()[1])
 
     def update_backup_clean(self, *args):
         self.config_manager.set_backup_clean_settings(self.backup_clean_var.get(), self.backup_clean_interval_var.get())
@@ -282,35 +289,46 @@ class MainWindow:
 
     def update_backup_clean_interval(self):
         self.config_manager.set_backup_clean_settings(self.backup_clean_var.get(), self.backup_clean_interval_var.get())
+        # 如果打开了自动清理
+        if self.backup_clean_var.get():
+            self.handle_cleanup()
+
 
     def update_ps_info(self):
         ps_version, active_doc = get_ps_info()
-        ps_unavailable = ps_version == "Unavailable" and active_doc == "No documents open"
+        ps_unavailable = ps_version == "Unavailable" and active_doc == "No open documents"
 
-        if self.first_psd:
-            if not ps_unavailable and active_doc != "No documents open":
-                # 记录首次检测到的文档名称
-                self.last_active_doc = active_doc
-                # 第一次检测到有文档时触发保存
-                self.first_psd = False
-                logging.info(f"First PSD {active_doc} detected. Saving...")
-                self.start_save(silent=True)
-        else:
-            if ps_unavailable:
-                # 连续检测3次，防止窗口拖动期间 COM 对象无法访问
+        # Handling state and document availability
+        if ps_unavailable:
+            if not self.first_psd:
+                # 连续检测 5 次，防止窗口拖动期间 COM 对象无法访问
                 self.ps_check_count += 1
-                if self.ps_check_count >= 3:
+                if self.ps_check_count >= 5:
+                    # 说明 PS 已退出，重置状态
                     self.ps_check_count = 0
                     self.first_psd = True
-            else:
-                # 仅在文档实际变更时重置计数器
-                if active_doc != self.last_active_doc:
-                    self.ps_check_count = 0
-                    self.last_active_doc = active_doc
-        
-        if self.ps_version_label.winfo_exists() and self.active_doc_label.winfo_exists():
-            self.ps_version_label.config(text=f"PS Version: {ps_version}")
-            self.active_doc_label.config(text=f"Active Doc: {active_doc}")
+            return
+        else:
+            self.ps_check_count = 0
+
+        if self.first_psd and active_doc not in (None, "No open documents"):
+            # Record the first document detected and initiate save process
+            if active_doc not in self.backed_up_docs:
+                self.backed_up_docs.add(active_doc)
+                self.first_psd = False
+                logging.info(f"First PSD {active_doc} detected. Saving...")
+                self.root.after(1000, lambda: self.start_save(silent=True))
+        elif active_doc not in self.backed_up_docs:
+            # If PS is available but the document hasn't been backed up, reset first_psd
+            self.first_psd = True
+
+        # UI Update handling
+        try:
+            if self.ps_version_label.winfo_exists() and self.active_doc_label.winfo_exists():
+                self.ps_version_label.config(text=f"PS Version: {ps_version}")
+                self.active_doc_label.config(text=f"Active Doc: {active_doc}")
+        except Exception as e:
+            logging.error(f"UI update failed: {str(e)}")
 
     def update_ps_info_periodically(self):
         self.update_ps_info()  # 更新 Photoshop 信息
@@ -372,9 +390,9 @@ class MainWindow:
     def handle_cleanup(self):
         if self.backup_clean_var.get():
             try:
-                # TODO 自动清理间隔暂时设置为比自动保存稍长一点
+                # TODO 自动清理间隔暂时设置为自动保存间隔
                 interval = int(self.auto_save_interval_var.get())
-                interval_ms = interval * 70000  # 将分钟转换为毫秒
+                interval_ms = interval * 60000
                 if self.cleanup_job is not None:
                     self.root.after_cancel(self.cleanup_job)
                 self.cleanup_schedule(interval_ms)
@@ -453,8 +471,8 @@ class MainWindow:
                 interval_ms = interval * 60000  # 将分钟转换为毫秒
                 if self.auto_save_job is not None:
                     self.root.after_cancel(self.auto_save_job)
-                # 立即启动第一次自动保存
-                self.auto_save_job = self.root.after(0, self.auto_save_schedule, interval_ms)
+                # 第一次自动保存
+                self.auto_save_job = self.root.after(interval_ms, self.auto_save_schedule, interval_ms)
                 logging.info(f"Auto save scheduled every {interval} minutes.")
             except ValueError:
                 messagebox.showerror("错误", "请输入有效的数字")
@@ -465,8 +483,15 @@ class MainWindow:
             logging.info("Auto save disabled.")
 
     def auto_save_schedule(self, interval_ms):
-        # 执行当前备份
-        self.start_save(silent=True)
+        ps_version, active_doc = get_ps_info()
+        if ps_version ==  "Unavailable":
+            logging.info("Photoshop is not available, skipping auto backup.")
+        elif active_doc == "No open documents":
+            logging.info("No open documents in Photoshop, skipping auto backup.")
+        else:
+            # 执行备份
+            self.start_save(silent=True)
+
         # 调度下一次备份
         try:
             self.auto_save_job = self.root.after(interval_ms, self.auto_save_schedule, interval_ms)

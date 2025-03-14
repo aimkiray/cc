@@ -16,7 +16,7 @@ def save_psd_as(folder_path):
         # 尝试获取 Photoshop 应用程序的引用，如果未打开则不会创建新实例
         psApp = win32com.client.GetActiveObject("Photoshop.Application")
         if psApp.Documents.Count == 0:
-            logging.error("There are no documents open in Photoshop.")
+            logging.error("No open documents in Photoshop.")
             return False
 
         doc = psApp.ActiveDocument
@@ -49,8 +49,8 @@ def get_ps_info():
         # 尝试连接到正在运行的 Photoshop 实例
         ps_app = win32com.client.GetActiveObject("Photoshop.Application")
         ps_version = ps_app.Version
-        active_doc = ps_app.ActiveDocument.Name if ps_app.Documents.Count > 0 else "No documents open"
+        active_doc = ps_app.ActiveDocument.Name if ps_app.Documents.Count > 0 else "No open documents"
     except Exception:
         ps_version = "Unavailable"
-        active_doc = "No documents open"
+        active_doc = "No open documents"
     return ps_version, active_doc
